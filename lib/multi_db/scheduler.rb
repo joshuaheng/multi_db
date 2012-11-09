@@ -6,7 +6,7 @@ module MultiDb
     attr :items
     delegate :[], :[]=, :to => :items
     tlattr_accessor :current_index, true
-    
+
     def initialize(items, blacklist_timeout = 1.minute)
       @n = items.length
       @items     = items
@@ -14,15 +14,15 @@ module MultiDb
       @blacklist_timeout = blacklist_timeout
       self.current_index = rand(@n)
     end
-    
+
     def blacklist!(item)
       @blacklist[@items.index(item)] = Time.now
     end
-    
+
     def current
       @items[current_index]
     end
-    
+
     def next
       previous = current_index
       until(@blacklist[next_index!] < Time.now - @blacklist_timeout) do
@@ -30,9 +30,9 @@ module MultiDb
       end
       current
     end
-    
+
     protected
-    
+
     def next_index!
       self.current_index = (current_index + 1) % @n
     end

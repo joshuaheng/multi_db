@@ -5,7 +5,7 @@ module MultiDb
     include ActiveRecord::ConnectionAdapters::QueryCache
     include QueryCacheCompat
     extend ThreadLocalAccessors
-    
+
     # Safe methods are those that should either go to the slave ONLY or go
     # to the current active connection.
     SAFE_METHODS = [ :select_all, :select_one, :select_value, :select_values, 
@@ -20,13 +20,13 @@ module MultiDb
 
     attr_accessor :master
     tlattr_accessor :master_depth, :current, true
-    
+
     class << self
 
       # defaults to Rails.env if multi_db is used with Rails
       # defaults to 'development' when used outside Rails
       attr_accessor :environment
-      
+
       # a list of models that should always go directly to the master
       #
       # Example:
@@ -39,7 +39,7 @@ module MultiDb
       # has to do this.
       # This will not affect failover if a master is unavailable.
       attr_accessor :sticky_slave
-      
+
       # if master should be the default db
       attr_accessor :defaults_to_master
 
@@ -49,7 +49,7 @@ module MultiDb
         self.master_models ||= DEFAULT_MASTER_MODELS
         self.environment   ||= (defined?(Rails) ? Rails.env : 'development')
         self.sticky_slave  ||= false
-        
+
         master = ActiveRecord::Base
         slaves = init_slaves
         raise "No slaves databases defined for environment: #{self.environment}" if slaves.empty?
@@ -58,7 +58,7 @@ module MultiDb
         master.connection_proxy = new(master, slaves, scheduler)
         master.logger.info("** multi_db with master and #{slaves.length} slave#{"s" if slaves.length > 1} loaded.")
       end
-      
+
       protected
 
       # Slave entries in the database.yml must be named like this
@@ -91,7 +91,7 @@ module MultiDb
       end
 
       private :new
-      
+
     end
 
     def initialize(master, slaves, scheduler = Scheduler)
@@ -111,12 +111,12 @@ module MultiDb
     def slave
       @slaves.current
     end
-    
+
     def scheduler
       @slaves
     end
-    
-    
+
+
     def with_master
       self.current = @master
       self.master_depth += 1
@@ -125,8 +125,8 @@ module MultiDb
       self.master_depth -= 1
       self.current = slave if (master_depth <= 0) 
     end
-  
-  
+
+
     def with_slave
       self.current = slave
       self.master_depth -= 1
@@ -135,7 +135,7 @@ module MultiDb
       self.master_depth += 1
       self.current = @master if (master_depth > 0)
     end
-    
+
     def transaction(start_db_transaction = true, &block)
       with_master { @master.retrieve_connection.transaction(start_db_transaction, &block) }
     end
@@ -168,18 +168,18 @@ module MultiDb
         end
       }, __FILE__, __LINE__
     end
-    
+
     def target_method(method)
       unsafe?(method) ? :send_to_master : :send_to_current
     end
-    
+
     def send_to_master(method, *args, &block)
       reconnect_master! if @reconnect
       @master.retrieve_connection.send(method, *args, &block)
     rescue => e
       raise_master_error(e)
     end
-    
+
     def send_to_current(method, *args, &block)
       reconnect_master! if @reconnect && master?
       current.retrieve_connection.send(method, *args, &block)
@@ -193,26 +193,26 @@ module MultiDb
       next_reader!
       retry
     end
-    
+
     def reconnect_master!
       @master.retrieve_connection.reconnect!
       @reconnect = false
     end
-    
+
     def raise_master_error(error)
       logger.fatal "[MULTIDB] Error accessing master database. Scheduling reconnect"
       @reconnect = true
       raise error
     end
-    
+
     def unsafe?(method)
       !SAFE_METHODS.include?(method)
     end
-    
+
     def master?
       current == @master
     end
-        
+
     def logger
       ActiveRecord::Base.logger
     end
