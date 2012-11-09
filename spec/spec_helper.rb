@@ -1,6 +1,5 @@
 require 'rubygems'
-gem 'activerecord', '3.0.5'
-%w[tlattr_accessors active_record yaml erb rspec logger].each {|lib| require lib}
+%w[tlattr_accessors active_record yaml erb rspec logger mysql2].each {|lib| require lib}
 
 module Rails
   def self.env
