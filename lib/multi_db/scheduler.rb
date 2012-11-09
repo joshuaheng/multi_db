@@ -3,6 +3,14 @@ module MultiDb
     class NoMoreItems < Exception; end
     extend ThreadLocalAccessors
 
+    def self.initial_index
+      @initial_index
+    end
+
+    def self.initial_index=(index)
+      @initial_index = index
+    end
+
     attr :items
     delegate :[], :[]=, :to => :items
     tlattr_accessor :current_index, true
@@ -12,7 +20,7 @@ module MultiDb
       @items     = items
       @blacklist = Array.new(@n, Time.at(0))
       @blacklist_timeout = blacklist_timeout
-      self.current_index = rand(@n)
+      self.current_index = Scheduler.initial_index || rand(@n)
     end
 
     def blacklist!(item)

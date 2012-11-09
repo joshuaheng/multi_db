@@ -5,9 +5,11 @@ require MULTI_DB_SPEC_DIR + '/../lib/multi_db/observer_extensions'
 require MULTI_DB_SPEC_DIR + '/../lib/multi_db/scheduler'
 require MULTI_DB_SPEC_DIR + '/../lib/multi_db/connection_proxy'
 
+
 describe MultiDb::ConnectionProxy do
 
   before(:all) do
+    MultiDb::Scheduler.initial_index = 0
     ActiveRecord::Base.configurations = MULTI_DB_SPEC_CONFIG
     ActiveRecord::Base.establish_connection :test
     ActiveRecord::Migration.verbose = false
