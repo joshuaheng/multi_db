@@ -34,7 +34,7 @@ describe MultiDb::WeightedScheduler do
     end
 
     it "caches the total weight" do
-      @scheduler.should_receive(:items).once.and_return([MultiDb::SlaveDatabase1])
+      @scheduler.should_receive(:items).once.and_return([MultiDb::TestSlaveDatabase1])
       @scheduler.total_weight
       @scheduler.total_weight
       @scheduler.total_weight

@@ -1,5 +1,5 @@
 module MultiDb
-  module ActiveRecordExtensions
+  module ActiveRecordRuntimeExtensions
     def self.included(base)
       base.send :include, InstanceMethods
       base.send :extend, ClassMethods
@@ -51,4 +51,18 @@ module MultiDb
       end
     end
   end
+
+  #TODO: This isn't working at all
+  module ActiveRecordExtensions
+    def self.included(base)
+      base.cattr_accessor :proxy_spec
+    end
+
+    def self.establish_connection(spec = nil)
+      self.proxy_spec = spec.to_s if spec.is_a?(String) || spec.is_a?(Symbol)
+      super
+    end
+  end
 end
+
+ActiveRecord::Base.send :include, MultiDb::ActiveRecordExtensions

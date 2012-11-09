@@ -32,7 +32,13 @@ module MultiDb
       # Example:
       #
       #  MultiDb::ConnectionProxy.master_models = ['MySessionStore', 'PaymentTransaction']
-      attr_accessor :master_models
+      def master_models
+        @master_models || DEFAULT_MASTER_MODELS
+      end
+
+      def master_models=(models)
+        @master_models = models || []
+      end
 
       # decides if we should switch to the next reader automatically.
       # If set to false, an after|before_filter in the ApplicationController
@@ -46,17 +52,28 @@ module MultiDb
       # Replaces the connection of ActiveRecord::Base with a proxy and
       # establishes the connections to the slaves.
       def setup!(scheduler = Scheduler)
-        self.master_models ||= DEFAULT_MASTER_MODELS
         self.environment   ||= (defined?(Rails) ? Rails.env : 'development')
         self.sticky_slave  ||= false
 
-        master = ActiveRecord::Base
-        slaves = init_slaves
-        raise "No slaves databases defined for environment: #{self.environment}" if slaves.empty?
-        master.send :include, MultiDb::ActiveRecordExtensions
-        ActiveRecord::Observer.send :include, MultiDb::ObserverExtensions
-        master.connection_proxy = new(master, slaves, scheduler)
-        master.logger.info("** multi_db with master and #{slaves.length} slave#{"s" if slaves.length > 1} loaded.")
+        ActiveRecord::Base.send :include, MultiDb::ActiveRecordRuntimeExtensions
+
+        connection_proxies = {}
+        ActiveRecord::Base.descendants.each do |descendant|
+          proxy_spec = descendant.proxy_spec || self.environment
+          slaves = []
+
+          unless connection_proxies[proxy_spec]
+            slaves = init_slaves proxy_spec
+            raise "No slave databases defined for #{proxy_spec}" if slaves.empty?
+            connection_proxies[proxy_spec] = new(descendant, slaves, scheduler)
+
+            ActiveRecord::Base.connection_proxy = connection_proxies[proxy_spec] if proxy_spec == self.environment
+          end
+
+          descendant.send :include, MultiDb::ActiveRecordRuntimeExtensions
+          descendant.connection_proxy = connection_proxies[proxy_spec]
+          descendant.logger.info("** multi_db with master and #{slaves.length} slave#{"s" if slaves.length > 1} loaded for #{descendant}")
+        end
       end
 
       protected
@@ -68,10 +85,10 @@ module MultiDb
       # or
       #   production_slave_database_someserver:
       # These would be available later as MultiDb::SlaveDatabaseSomeserver
-      def init_slaves
+      def init_slaves(spec)
         [].tap do |slaves|
           ActiveRecord::Base.configurations.each do |name, values|
-            if name.to_s =~ /#{self.environment}_(slave_database.*)/
+            if name.to_s =~ /^(#{spec}_slave_database.*)/
               weight  = if values['weight'].blank?
                           1
                         else

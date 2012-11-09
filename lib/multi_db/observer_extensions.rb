@@ -16,3 +16,5 @@ module MultiDb
     end
   end
 end
+
+ActiveRecord::Observer.send :include, MultiDb::ObserverExtensions
