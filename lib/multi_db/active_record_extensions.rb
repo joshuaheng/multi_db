@@ -3,7 +3,6 @@ module MultiDb
     def self.included(base)
       base.send :include, InstanceMethods
       base.send :extend, ClassMethods
-      base.cattr_accessor :connection_proxy
       # handle subclasses which were defined by the framework or plugins
       base.send(:descendants).each do |child|
         child.hijack_connection
@@ -12,17 +11,25 @@ module MultiDb
 
     module InstanceMethods
       def reload(options = nil)
-        self.connection_proxy.with_master { super }
+        @connection_proxy.with_master { super }
       end
     end
 
     module ClassMethods
+      def connection_proxy
+        @connection_proxy
+      end
+
+      def connection_proxy=(proxy)
+        @connection_proxy = proxy
+      end
+
       # Make sure transactions always switch to the master
       def transaction(options = {}, &block)
         if self.connection.kind_of?(ConnectionProxy)
           super
         else
-          self.connection_proxy.with_master { super }
+          @connection_proxy.with_master { super }
         end
       end
 
@@ -31,7 +38,7 @@ module MultiDb
         if ActiveRecord::Base.configurations.blank?
           yield
         else
-          self.connection_proxy.cache(&block)
+          @connection_proxy.cache(&block)
         end
       end
 
@@ -45,7 +52,7 @@ module MultiDb
         logger.info "[MULTIDB] hijacking connection for #{self.to_s}"
         class << self
           def connection
-            self.connection_proxy
+            @connection_proxy
           end
         end
       end
