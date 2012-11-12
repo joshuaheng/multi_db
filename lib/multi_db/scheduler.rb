@@ -1,7 +1,8 @@
 module MultiDb
   class Scheduler
-    class NoMoreSlaves < Exception; end
     extend ThreadLocalAccessors
+
+    class NoMoreSlaves < Exception; end
 
     def self.initial_index
       @initial_index
@@ -11,16 +12,16 @@ module MultiDb
       @initial_index = index
     end
 
-    attr :slaves
+    attr_accessor :slaves
     delegate :[], :[]=, :to => :slaves
     tlattr_accessor :current_index, true
 
     def initialize(slaves, blacklist_timeout = 1.minute)
-      @n = slaves.length
       @slaves = slaves
-      @blacklist = Array.new(@n, Time.at(0))
+      @slave_count = slaves.length
+      @blacklist = Array.new(@slave_count, Time.at(0))
       @blacklist_timeout = blacklist_timeout
-      self.current_index = Scheduler.initial_index || rand(@n)
+      self.current_index = Scheduler.initial_index || rand(@slave_count)
     end
 
     def blacklist!(slave)
@@ -42,7 +43,7 @@ module MultiDb
     protected
 
     def next_index!
-      self.current_index = (current_index + 1) % @n
+      self.current_index = (current_index + 1) % @slave_count
     end
 
   end

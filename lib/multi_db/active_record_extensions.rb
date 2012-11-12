@@ -3,7 +3,8 @@ module MultiDb
     def self.included(base)
       base.send :include, InstanceMethods
       base.send :extend, ClassMethods
-      # handle subclasses which were defined by the framework or plugins
+
+      # Handle subclasses which were defined by the framework or plugins
       base.send(:descendants).each do |child|
         child.hijack_connection
       end
@@ -28,7 +29,7 @@ module MultiDb
         @connection_proxy = proxy
       end
 
-      # Make sure transactions always switch to the master
+      # Always perform transactions on master
       def transaction(options = {}, &block)
         if self.connection.kind_of?(ConnectionProxy)
           super
@@ -37,7 +38,7 @@ module MultiDb
         end
       end
 
-      # make caching always use the ConnectionProxy
+      # Always use ConnectionProxy for caching
       def cache(&block)
         if ActiveRecord::Base.configurations.blank?
           yield

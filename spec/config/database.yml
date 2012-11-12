@@ -1,43 +1,31 @@
-test: &test
+default: &default
   adapter: mysql2
-  database: multi_db_test
   username: root
   password:
   host: 127.0.0.1
+
+test: &test
+  <<: *default
+  database: multi_db_test
 
 test_slave_database_1:
   <<: *test
 
 test_slave_database_2:
-  adapter: mysql2
-  database: multi_db_test
-  username: root
-  password:
-  host: 127.0.0.1
+  <<: *test
   weight: 10
   
 test_slave_database_3:
-  adapter: mysql2
-  database: multi_db_test
-  username: root
-  password:
-  host: 127.0.0.1
+  <<: *test
   weight: 0
 
 test_slave_database_4:
-  adapter: mysql2
-  database: multi_db_test
-  username: root
-  password:
-  host: 127.0.0.1
+  <<: *test
   weight: 5
 
 test_extra: &test_extra
-  adapter: mysql2
+  <<: *default
   database: multi_db_test_extra
-  username: root
-  password:
-  host: 127.0.0.1
 
 test_extra_slave_database_1:
   <<: *test_extra
@@ -46,19 +34,13 @@ test_extra_slave_database_2:
   <<: *test_extra
 
 readable_master:
-  adapter: mysql2
+  <<: *default
   database: multi_db_readable_master
-  username: root
-  password:
-  host: 127.0.0.1
   readable: true
 
 readable_master_slave_database:
-  adapter: mysql2
+  <<: *default
   database: multi_db_readable_master
-  username: root
-  password:
-  host: 127.0.0.1
 
 unused:
   <<: *test

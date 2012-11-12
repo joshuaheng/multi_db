@@ -3,11 +3,10 @@ require 'active_record/connection_adapters/abstract/query_cache'
 module MultiDb
   class ConnectionProxy
     include ActiveRecord::ConnectionAdapters::QueryCache
-    include QueryCacheCompat
+    include QueryCacheCompatibility
     extend ThreadLocalAccessors
 
-    # Safe methods are those that should either go to the slave ONLY or go
-    # to the current active connection.
+    # Safe methods will go only to the slave or to the current active connection
     SAFE_METHODS = [ :select_all, :select_one, :select_value, :select_values, 
       :select_rows, :select, :verify!, :raw_connection, :active?, :reconnect!,
       :disconnect!, :reset_runtime, :log, :log_info ]
@@ -25,15 +24,15 @@ module MultiDb
 
     class << self
 
-      # defaults to Rails.env if multi_db is used with Rails
-      # defaults to 'development' when used outside Rails
+      # Defaults to Rails.env if multi_db is used with Rails
+      # Defaults to 'development' when used outside Rails
       attr_accessor :environment
 
-      # a list of models that should always go directly to the master
+      # A list of models that should always go directly to the master
       #
       # Example:
       #
-      #  MultiDb::ConnectionProxy.master_models = ['MySessionStore', 'PaymentTransaction']
+      #   MultiDb::ConnectionProxy.master_models = ['MySessionStore', 'PaymentTransaction']
       def master_models
         @master_models || DEFAULT_MASTER_MODELS
       end
@@ -42,17 +41,16 @@ module MultiDb
         @master_models = models || []
       end
 
-      # decides if we should switch to the next reader automatically.
-      # If set to false, an after|before_filter in the ApplicationController
-      # has to do this.
+      # Decides if we should switch to the next reader automatically.
+      # If true, a before or after filter should do this.
       # This will not affect failover if a master is unavailable.
       attr_accessor :sticky_slave
 
-      # if master should be the default db
+      # If master should be the default DB
       attr_accessor :defaults_to_master
 
-      # Replaces the connection of ActiveRecord::Base with a proxy and
-      # establishes the connections to the slaves.
+      # Replaces the connection of your models with a proxy and
+      # establishes the connections to the slaves
       def setup!(scheduler = Scheduler)
         self.environment   ||= (defined?(Rails) ? Rails.env : 'development')
         self.sticky_slave  ||= false
@@ -73,19 +71,17 @@ module MultiDb
 
           descendant.send :include, MultiDb::ActiveRecordRuntimeExtensions
           descendant.connection_proxy = connection_proxies[proxy_spec]
-          descendant.logger.info("** multi_db with master and #{slaves.length} slave#{"s" if slaves.length > 1} loaded for #{descendant}")
+          descendant.logger.info("[MULTIDB] Master and #{slaves.length} slave#{"s" if slaves.length > 1} loaded for #{descendant}")
         end
       end
 
       protected
 
       # Slave entries in the database.yml must be named like this
-      #   development_slave_database:
-      # or
-      #   development_slave_database1:
-      # or
-      #   production_slave_database_someserver:
-      # These would be available later as MultiDb::SlaveDatabaseSomeserver
+      #   development_slave_database_0:
+      #   development_slave_database_1:
+      #   ...
+      # These would be available later as MultiDb::DevelopmentSlaveDatabase0, etc.
       def init_slaves(spec, master)
         slaves = [].tap do |slaves|
           ActiveRecord::Base.configurations.each do |name, values|
@@ -142,7 +138,6 @@ module MultiDb
       @scheduler
     end
 
-
     def with_master
       self.current = @master
       self.master_depth += 1
@@ -151,7 +146,6 @@ module MultiDb
       self.master_depth -= 1
       self.current = slave if (master_depth <= 0) 
     end
-
 
     def with_slave
       self.current = slave
@@ -177,7 +171,9 @@ module MultiDb
     # Switches to the next slave database for read operations.
     # Fails over to the master database if all slaves are unavailable.
     def next_reader!
-      return if  master_depth > 0  # don't if in with_master block
+      # Don't if in with_master block
+      return if  master_depth > 0
+
       self.current = @scheduler.next
     rescue Scheduler::NoMoreSlaves
       logger.warn "[MULTIDB] All slaves are blacklisted. Reading from master"
@@ -187,12 +183,13 @@ module MultiDb
     protected
 
     def create_delegation_method!(method)
-      self.instance_eval %Q{
+      method_def = %Q{
         def #{method}(*args, &block)
           #{'next_reader!' unless self.class.sticky_slave || unsafe?(method)}
           #{target_method(method)}(:#{method}, *args, &block)
         end
-      }, __FILE__, __LINE__
+      }
+      self.instance_eval method_def, __FILE__, __LINE__
     end
 
     def target_method(method)
@@ -209,9 +206,12 @@ module MultiDb
     def send_to_current(method, *args, &block)
       reconnect_master! if @reconnect && master?
       current.retrieve_connection.send(method, *args, &block)
+
     rescue NotImplementedError, NoMethodError
       raise
-    rescue => e # TODO don't rescue everything
+
+     # TODO Don't rescue everything
+    rescue => e
       raise_master_error(e) if master?
       logger.warn "[MULTIDB] Error reading from slave database"
       logger.error %(#{e.message}\n#{e.backtrace.join("\n")})
