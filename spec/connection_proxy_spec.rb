@@ -60,8 +60,8 @@ describe MultiDb::ConnectionProxy do
       defined?(MultiDb::TestSlaveDatabase3).should be_true
       defined?(MultiDb::TestSlaveDatabase4).should be_true
 
-      defined?(MultiDb::TestExtraSlaveDatabase1).should be_false
-      defined?(MultiDb::TestExtraSlaveDatabase2).should be_false
+      defined?(MultiDb::TestExtraSlaveDatabase1).should be_true
+      defined?(MultiDb::TestExtraSlaveDatabase2).should be_true
       defined?(MultiDb::UnusedSlaveDatabase).should be_false
     end
 
@@ -283,7 +283,7 @@ describe MultiDb::ConnectionProxy do
 
     it "has a 'scheduler' method that returns the current scheduler instance" do
       my_scheduler = mock('My Scheduler!', :current => nil)
-      MyScheduler.should_receive(:new).and_return(my_scheduler)
+      MyScheduler.should_receive(:new).at_least(:once).and_return(my_scheduler)
       MultiDb::ConnectionProxy.setup!(MyScheduler)
       ActiveRecord::Base.connection_proxy.should respond_to(:scheduler)
       ActiveRecord::Base.connection_proxy.scheduler.should be(my_scheduler)

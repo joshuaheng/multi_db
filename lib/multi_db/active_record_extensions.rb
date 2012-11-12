@@ -51,18 +51,20 @@ module MultiDb
       end
     end
   end
-
-  #TODO: This isn't working at all
-  module ActiveRecordExtensions
-    def self.included(base)
-      base.cattr_accessor :proxy_spec
-    end
-
-    def self.establish_connection(spec = nil)
-      self.proxy_spec = spec.to_s if spec.is_a?(String) || spec.is_a?(Symbol)
-      super
-    end
-  end
 end
 
-ActiveRecord::Base.send :include, MultiDb::ActiveRecordExtensions
+ActiveRecord::Base.class_eval do
+  class << self
+    def proxy_spec
+      @proxy_spec
+    end
+
+    def establish_multi_db_connection(spec = nil)
+      @proxy_spec = (spec.is_a?(String) || spec.is_a?(Symbol)) ? spec.to_s : nil
+      establish_base_connection spec
+    end
+
+    alias_method :establish_base_connection, :establish_connection
+    alias_method :establish_connection,      :establish_multi_db_connection
+  end
+end
