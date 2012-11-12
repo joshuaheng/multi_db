@@ -85,7 +85,7 @@ module MultiDb
       #   production_slave_database_someserver:
       # These would be available later as MultiDb::SlaveDatabaseSomeserver
       def init_slaves(spec)
-        [].tap do |slaves|
+        slaves = [].tap do |slaves|
           ActiveRecord::Base.configurations.each do |name, values|
             if name.to_s =~ /^(#{spec}_slave_database.*)/
               weight  = if values['weight'].blank?
@@ -100,10 +100,13 @@ module MultiDb
                   WEIGHT = #{weight} unless const_defined?('WEIGHT')
                 end
               }, __FILE__, __LINE__
-              slaves << "MultiDb::#{$1.camelize}".constantize
+              slaves << "MultiDb::#{$1.camelize}"
             end
           end
         end
+
+        # Sorting obviously isn't necessary, but it makes testing a bit easier
+        slaves.sort.map &:constantize
       end
 
       private :new
