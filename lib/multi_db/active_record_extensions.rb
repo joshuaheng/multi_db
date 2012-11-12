@@ -52,7 +52,7 @@ module MultiDb
       end
 
       def hijack_connection
-        return if ConnectionProxy.master_models.include?(self.to_s)
+        return if ConnectionProxy.master_models.include?(self.to_s) || ConnectionProxy.master_models.include?(self)
         logger.info "[MULTIDB] hijacking connection for #{self.to_s}"
         class << self
           def connection

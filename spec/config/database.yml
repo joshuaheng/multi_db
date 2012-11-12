@@ -22,7 +22,7 @@ test_slave_database_3:
   username: root
   password:
   host: 127.0.0.1
-  weight: 5
+  weight: 0
 
 test_slave_database_4:
   adapter: mysql2
@@ -30,7 +30,7 @@ test_slave_database_4:
   username: root
   password:
   host: 127.0.0.1
-  weight: 10
+  weight: 5
 
 test_extra: &test_extra
   adapter: mysql2

@@ -1,5 +1,6 @@
-require 'rubygems'
-%w[tlattr_accessors active_record yaml erb rspec logger mysql2].each {|lib| require lib}
+%w[active_record yaml erb rspec logger mysql2].each { |lib| require lib }
+
+require File.expand_path('../../lib/multi_db', __FILE__)
 
 module Rails
   def self.env
@@ -7,8 +8,23 @@ module Rails
   end
 end
 
-MULTI_DB_SPEC_DIR = File.dirname(__FILE__)
-MULTI_DB_SPEC_CONFIG = YAML::load(File.open(MULTI_DB_SPEC_DIR + '/config/database.yml'))
+# Don't allow randomized slave access for the tests
+MultiDb::Scheduler.initial_index = 0
 
-ActiveRecord::Base.logger = Logger.new(MULTI_DB_SPEC_DIR + "/debug.log")
-ActiveRecord::Base.configurations = MULTI_DB_SPEC_CONFIG
+ActiveRecord::Base.logger = Logger.new(File.expand_path('../debug.log', __FILE__))
+ActiveRecord::Base.configurations = YAML::load(File.open(File.expand_path('../config/database.yml', __FILE__)))
+
+ActiveRecord::Migration.verbose = false
+
+ActiveRecord::Base.establish_connection :test_extra
+ActiveRecord::Migration.create_table(:extra_models, :force => true) {|t| t.string :pub}
+class ExtraModel < ActiveRecord::Base
+  establish_connection :test_extra
+end
+
+ActiveRecord::Base.establish_connection :test
+ActiveRecord::Migration.create_table(:test_models, :force => true) {|t| t.string :bar}
+class TestModel < ActiveRecord::Base; end
+
+ActiveRecord::Migration.create_table(:master_models, :force => true) {}
+class MasterModel < ActiveRecord::Base; end

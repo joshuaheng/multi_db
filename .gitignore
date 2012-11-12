@@ -1,5 +1,5 @@
-spec/debug.log
-experimental
 .rvmrc
 Gemfile.lock
+tmp
+spec/debug.log
 

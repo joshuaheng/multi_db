@@ -18,6 +18,8 @@ module MultiDb
       DEFAULT_MASTER_MODELS = ['CGI::Session::ActiveRecordStore::Session']
     end
 
+    cattr_accessor :connection_proxies
+
     attr_accessor :master
     tlattr_accessor :master_depth, :current, true
 
@@ -57,7 +59,7 @@ module MultiDb
 
         ActiveRecord::Base.send :include, MultiDb::ActiveRecordRuntimeExtensions
 
-        connection_proxies = {}
+        self.connection_proxies = {}
         ActiveRecord::Base.descendants.each do |descendant|
           proxy_spec = descendant.proxy_spec || self.environment
           slaves = []
@@ -65,8 +67,8 @@ module MultiDb
           unless connection_proxies[proxy_spec]
             slaves = init_slaves proxy_spec
             slaves = [descendant] if slaves.empty?
-            connection_proxies[proxy_spec] = new(descendant, slaves, scheduler)
-            ActiveRecord::Base.connection_proxy = connection_proxies[proxy_spec] if proxy_spec == self.environment
+            self.connection_proxies[proxy_spec] = new(descendant, slaves, scheduler)
+            ActiveRecord::Base.connection_proxy = self.connection_proxies[proxy_spec] if proxy_spec == self.environment
           end
 
           descendant.send :include, MultiDb::ActiveRecordRuntimeExtensions

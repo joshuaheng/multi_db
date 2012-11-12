@@ -1,26 +1,24 @@
 require File.expand_path(File.dirname(__FILE__) + '/spec_helper')
-require MULTI_DB_SPEC_DIR + '/../lib/multi_db/scheduler'
 
 describe MultiDb::Scheduler do
 
   before do
     @items = [5, 7, 4, 8]
-    @scheduler = MultiDb::Scheduler.new(@items.clone)
+    @scheduler = MultiDb::Scheduler.new(@items)
   end
 
-  it "should return items in a round robin fashion" do
-    first = @items.shift
-    @scheduler.current.should == first
-    @items.each do |item|
+  it 'should return items in a round robin fashion' do
+    @scheduler.current.should == @items.first
+    @items[1..-1].each do |item|
       @scheduler.next.should == item
     end
-    @scheduler.next.should == first
+    @scheduler.next.should == @items.first
   end
 
   it 'should not return blacklisted items' do
-    @scheduler.blacklist!(4)
-    @items.size.times do
-      @scheduler.next.should_not == 4
+    @scheduler.blacklist! @items[2]
+    @items.length.times do
+      @scheduler.next.should_not == @items[2]
     end
   end
 
@@ -28,28 +26,25 @@ describe MultiDb::Scheduler do
     @items.each do |item|
       @scheduler.blacklist!(item)
     end
-    lambda {
-      @scheduler.next
-    }.should raise_error(MultiDb::Scheduler::NoMoreItems)
+    lambda { @scheduler.next }.should raise_error(MultiDb::Scheduler::NoMoreItems)
   end
 
   it 'should unblacklist items automatically' do
     @scheduler = MultiDb::Scheduler.new(@items.clone, 1.second)
-    @scheduler.blacklist!(7)
-    sleep(1)
-    @scheduler.next.should == 7
+    @scheduler.blacklist! @items[1]
+    sleep 1
+    @scheduler.next.should == @items[1]
   end
 
-  describe '(accessed from multiple threads)' do
-
-    it '#current and #next should return the same item for the same thread' do
-      @scheduler.current.should == 5
-      @scheduler.next.should == 7
+  describe 'in multiple threads' do
+    it 'should keep #current and #next local to the thread' do
+      @scheduler.current.should == @items[0]
+      @scheduler.next.should == @items[1]
       Thread.new do
-        @scheduler.current.should == 5
-        @scheduler.next.should == 7
+        @scheduler.current.should == @items[0]
+        @scheduler.next.should == @items[1]
       end.join
-      @scheduler.next.should == 4
+      @scheduler.next.should == @items[2]
     end
 
   end

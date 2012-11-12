@@ -1,60 +1,41 @@
 require File.expand_path(File.dirname(__FILE__) + '/spec_helper')
-require MULTI_DB_SPEC_DIR + '/../lib/multi_db/query_cache_compat'
-require MULTI_DB_SPEC_DIR + '/../lib/multi_db/active_record_extensions'
-require MULTI_DB_SPEC_DIR + '/../lib/multi_db/observer_extensions'
-require MULTI_DB_SPEC_DIR + '/../lib/multi_db/scheduler'
-require MULTI_DB_SPEC_DIR + '/../lib/multi_db/connection_proxy'
-
 
 describe MultiDb::ConnectionProxy do
-
-  before(:all) do
-    MultiDb::Scheduler.initial_index = 0
-
-    ActiveRecord::Base.configurations = MULTI_DB_SPEC_CONFIG
-    ActiveRecord::Migration.verbose = false
-
-    ActiveRecord::Base.establish_connection :test_extra
-    ActiveRecord::Migration.create_table(:extra_models, :force => true) {|t| t.string :pub}
-
-    ActiveRecord::Base.establish_connection :test
-    ActiveRecord::Migration.create_table(:master_models, :force => true) {}
-    ActiveRecord::Migration.create_table(:foo_models, :force => true) {|t| t.string :bar}
-
-    class MasterModel < ActiveRecord::Base; end
-    class FooModel < ActiveRecord::Base; end
-    class ExtraModel < ActiveRecord::Base
-      establish_connection :test_extra
-    end
-
+  before do
     @sql = 'SELECT 1 + 1 FROM DUAL'
   end
 
-  describe "with standard Scheduler" do
-    before(:each) do
+  describe 'master_models' do
+    before(:all) do
+    end
+
+    it 'should not get proxies when the classname is set' do
       MultiDb::ConnectionProxy.master_models = ['MasterModel']
       MultiDb::ConnectionProxy.setup!
-      @proxy = ActiveRecord::Base.connection_proxy
-      @master = @proxy.master.retrieve_connection
-      @slave1 = MultiDb::TestSlaveDatabase1.retrieve_connection
-      @slave2 = MultiDb::TestSlaveDatabase2.retrieve_connection
-      @slave3 = MultiDb::TestSlaveDatabase3.retrieve_connection
-      @slave4 = MultiDb::TestSlaveDatabase4.retrieve_connection
-    end
-
-    it 'AR::B should respond to #connection_proxy' do
-      ActiveRecord::Base.connection_proxy.should be_kind_of(MultiDb::ConnectionProxy)
-    end
-
-    it 'FooModel#connection should return an instance of MultiDb::ConnectionProxy' do
-      FooModel.connection.should be_kind_of(MultiDb::ConnectionProxy)
-    end
-
-    it 'MasterModel#connection should not return an instance of MultiDb::ConnectionProxy' do
       MasterModel.connection.should_not be_kind_of(MultiDb::ConnectionProxy)
     end
 
-    it "should generate classes for the slaves of each used entry in the database.yml" do
+    it 'should not get proxies when the class is set' do
+      MultiDb::ConnectionProxy.master_models = [MasterModel]
+      MultiDb::ConnectionProxy.setup!
+      MasterModel.connection.should_not be_kind_of(MultiDb::ConnectionProxy)
+    end
+  end
+
+  describe 'setup!' do
+    it 'ActiveRecord::Base should respond to #connection_proxy' do
+      MultiDb::ConnectionProxy.setup!
+      ActiveRecord::Base.connection_proxy.should be_kind_of(MultiDb::ConnectionProxy)
+    end
+
+    it 'TestModel#connection should return an instance of MultiDb::ConnectionProxy' do
+      MultiDb::ConnectionProxy.setup!
+      TestModel.connection.should be_kind_of(MultiDb::ConnectionProxy)
+    end
+
+    it 'should generate slave classes for each used database.yml entry' do
+      MultiDb::ConnectionProxy.setup!
+
       defined?(MultiDb::TestSlaveDatabase1).should be_true
       defined?(MultiDb::TestSlaveDatabase2).should be_true
       defined?(MultiDb::TestSlaveDatabase3).should be_true
@@ -62,158 +43,316 @@ describe MultiDb::ConnectionProxy do
 
       defined?(MultiDb::TestExtraSlaveDatabase1).should be_true
       defined?(MultiDb::TestExtraSlaveDatabase2).should be_true
+    end
+
+    it 'should not generate slave classes for unused database.yml entries' do
       defined?(MultiDb::UnusedSlaveDatabase).should be_false
     end
 
-    it 'should handle nested with_master-blocks correctly' do
-      @proxy.current.should_not == @proxy.master
-      @proxy.with_master do
-        @proxy.current.should == @proxy.master
-        @proxy.with_master do
-          @proxy.current.should == @proxy.master
-          @proxy.with_master do
-            @proxy.current.should == @proxy.master
-          end
-          @proxy.current.should == @proxy.master
-        end
+    it 'should create a connection proxy with slaves for each established connection' do
+      spec_masters = {
+        'test'       => TestModel,
+        'test_extra' => ExtraModel
+      }
+
+      spec_slaves = {
+        'test'       => [MultiDb::TestSlaveDatabase1, MultiDb::TestSlaveDatabase2, MultiDb::TestSlaveDatabase3,  MultiDb::TestSlaveDatabase4],
+        'test_extra' => [MultiDb::TestExtraSlaveDatabase1, MultiDb::TestExtraSlaveDatabase2]
+      }
+
+      MultiDb::ConnectionProxy.setup!
+
+      spec_slaves.each do |spec, slaves|
+        proxy = MultiDb::ConnectionProxy.connection_proxies[spec]
+        proxy.should_not be_nil
+        proxy.scheduler.items.should == slaves
+        proxy.master.should == spec_masters[spec]
+      end
+    end
+
+    it 'should create a connection proxy with "no" slaves for each generaged slave class' do
+      slaves_by_spec = {
+        'test_slave_database_1'       => MultiDb::TestSlaveDatabase1,
+        'test_slave_database_2'       => MultiDb::TestSlaveDatabase2,
+        'test_slave_database_3'       => MultiDb::TestSlaveDatabase3,
+        'test_slave_database_4'       => MultiDb::TestSlaveDatabase4,
+        'test_extra_slave_database_1' => MultiDb::TestExtraSlaveDatabase1,
+        'test_extra_slave_database_2' => MultiDb::TestExtraSlaveDatabase2
+      }
+
+      MultiDb::ConnectionProxy.setup!
+
+      slaves_by_spec.each do |spec, slave|
+        proxy = MultiDb::ConnectionProxy.connection_proxies[spec]
+        proxy.should_not be_nil
+
+        # By "no" slaves, we mean that the only "slave" is actually the proxy's master connection
+        proxy.scheduler.items.should == [slave]
+        proxy.master.should == slave
+      end
+    end
+
+    describe 'weights' do
+      before do
+        MultiDb::ConnectionProxy.setup!
+      end
+
+      it 'should default slave weight to 1' do
+        MultiDb::TestSlaveDatabase1::WEIGHT.should == 1
+      end
+
+      it 'should assign slave weights as configured in database.yml' do
+        MultiDb::TestSlaveDatabase2::WEIGHT.should == 10
+      end
+
+      it 'should set slave weight to 1 if it is configured to be 0' do
+        MultiDb::TestSlaveDatabase3::WEIGHT.should == 1
+      end
+    end
+
+    describe 'defaults_to_master' do
+      before do
+        MultiDb::ConnectionProxy.defaults_to_master = true
+        MultiDb::ConnectionProxy.setup!
+        @proxy = TestModel.connection_proxy
+      end
+
+      after do
+        MultiDb::ConnectionProxy.defaults_to_master = false
+      end
+
+      it 'should set the default database to master' do
         @proxy.current.should == @proxy.master
       end
+
+      it 'should continue to use master when in a with_master block' do
+        @proxy.with_master do
+          @proxy.current.should == @proxy.master
+        end
+      end
+
+      it 'should use slaves when in a with_slave block' do
+        @proxy.with_slave do
+          @proxy.current.should_not == @proxy.master
+          @proxy.scheduler.items.should include(@proxy.current)
+        end
+      end
+
+      it 'should handle nested with_slave and with_master blocks' do
+        lambda { |nester, depth|
+          @proxy.with_slave do
+            @proxy.current.should_not == @proxy.master
+            @proxy.scheduler.items.should include(@proxy.current)
+
+            @proxy.with_master do
+              @proxy.current.should == @proxy.master
+              nester.call(nester, depth - 1) if depth > 0
+            end
+          end
+        }.tap { |nester| nester.call nester, 10 }
+      end
+    end
+  end
+
+  describe 'db access' do
+    before do
+      MultiDb::ConnectionProxy.setup!
+      @proxy = TestModel.connection_proxy
+
+      @master_conn = @proxy.master.retrieve_connection
+      @slave_conns = @proxy.scheduler.items.map &:retrieve_connection
+    end
+
+    def setup_slave_expectations(call, call_count, starting_index = 0)
+      expectations = @slave_conns.map { 0 }
+
+      call_count.times do |i|
+        i = (i + starting_index) % @slave_conns.length
+        expectations[i] = expectations[i] + 1
+      end
+
+      expectations.each_with_index do |expectation, i|
+        @slave_conns[i].should_receive(call).exactly(expectation || 0)
+      end
+    end
+
+    it 'should handle nested with_master blocks' do
+      @proxy.current.should_not == @proxy.master
+
+      lambda { |nester, depth|
+        @proxy.with_master do
+          @proxy.current.should == @proxy.master
+          nester.call(nester, depth - 1) if depth > 0
+        end
+      }.tap { |nester| nester.call nester, 10 }
+
       @proxy.current.should_not == @proxy.master
     end
 
     it 'should perform transactions on the master' do
-      @master.should_receive(:select_all).exactly(1) # makes sure the first one goes to a slave
-      @proxy.select_all(@sql)
-      ActiveRecord::Base.transaction do
-        @proxy.select_all(@sql)
-      end
+      @master_conn.should_receive(:select_all).exactly(:once)
+      ActiveRecord::Base.transaction { @proxy.select_all @sql }
+
+      #Should go to a slave
+      @proxy.select_all @sql
     end
 
-    it 'should switch to the next reader on selects' do
-      @slave1.should_receive(:select_one).exactly(2)
-      @slave2.should_receive(:select_one).exactly(2)
-      6.times { @proxy.select_one(@sql) }
-    end
-
-    it 'should not switch to the next reader when whithin a with_master-block' do
-      @master.should_receive(:select_one).twice
-      @slave1.should_not_receive(:select_one)
-      @slave2.should_not_receive(:select_one)
-      @proxy.with_master do
-        2.times { @proxy.select_one(@sql) }
+    it 'should switch to the next slave on selects' do
+      requests = 6
+      setup_slave_expectations :select_one, requests
+      requests.times do
+        @proxy.select_one @sql
       end
     end
 
     it 'should send dangerous methods to the master' do
-      meths = [:insert, :update, :delete, :execute]
-      meths.each do |meth|
-        @slave1.stub!(meth).and_raise(RuntimeError)
-        @master.should_receive(meth).and_return(true)
-        @proxy.send(meth, @sql)
+      [:insert, :update, :delete, :execute].each do |method|
+        @master_conn.should_receive method
+        @proxy.send method, @sql
       end
     end
 
     it 'should dynamically generate safe methods' do
-      @proxy.should_not respond_to(:select_value)
-      @proxy.select_value(@sql)
-      @proxy.should respond_to(:select_value)
+      # Can't really test all of them, just pick one that is unused in other tests
+      method = :select_value
+      @proxy.should_not respond_to(method)
+      @proxy.send method, @sql
+      @proxy.should respond_to(method)
+    end
+
+    it 'should not dynamically generate other methods' do
+      other_methods = [:some, :weird, :things]
+      other_methods.each do |method|
+        @proxy.should_not respond_to(method)
+        begin
+          @proxy.send method
+        rescue
+        end
+        @proxy.should_not respond_to(method)
+      end
     end
 
     it 'should cache queries using select_all' do
-      ActiveRecord::Base.cache do
-        # next_reader will be called and switch to the TestSlaveDatabase2
-        @slave2.should_receive(:select_all).exactly(1)
-        @slave1.should_not_receive(:select_all)
-        @master.should_not_receive(:select_all)
-        3.times { @proxy.select_all(@sql) }
+      TestModel.cache do
+        # next_reader will be called and move to the second slave
+        @slave_conns[0].should_not_receive(:select_all)
+        @master_conn.should_not_receive(:select_all)
+
+        @slave_conns[1].should_receive(:select_all).exactly(:once)
+
+        3.times { @proxy.select_all @sql }
       end
     end
 
-    it 'should invalidate the cache on insert, delete and update' do
+    it 'should invalidate the cache on insert, delete, and update' do
+      methods = [:insert, :update, :delete]
+      requests = methods.length
+
+      # This starts on the second slave
+      setup_slave_expectations :select_all, requests, 1
+
       ActiveRecord::Base.cache do
-        meths = [:insert, :update, :delete, :insert, :update]
-        meths.each do |meth|
-          @master.should_receive(meth).and_return(true)
-        end
-        @slave2.should_receive(:select_all).twice
-        @slave1.should_receive(:select_all).once
-        5.times do |i|
-          @proxy.select_all(@sql)
-          @proxy.send(meths[i])
+        methods.each do |method|
+          @master_conn.should_receive(method).and_return(true)
+
+          @proxy.select_all @sql
+          @proxy.send method
         end
       end
     end
 
-    it 'should retry the next slave when one fails and finally fall back to the master' do
-      @slave1.should_receive(:select_all).once.and_raise(RuntimeError)
-      @slave2.should_receive(:select_all).once.and_raise(RuntimeError)
-      @slave3.should_receive(:select_all).once.and_raise(RuntimeError)
-      @slave4.should_receive(:select_all).once.and_raise(RuntimeError)
-      @master.should_receive(:select_all).and_return(true)
-      @proxy.select_all(@sql)
+    it 'should retry the next slave when one fails' do
+      # This starts on the second slave
+      @slave_conns[1].should_receive(:select_all).and_raise(RuntimeError)
+      @slave_conns[2].should_receive(:select_all).and_return(true)
+      @proxy.select_all @sql
     end
 
-    it 'should try to reconnect the master connection after the master has failed' do
-      @master.should_receive(:update).and_raise(RuntimeError)
-      lambda { @proxy.update(@sql) }.should raise_error
-      @master.should_receive(:reconnect!).and_return(true)
-      @master.should_receive(:insert).and_return(1)
-      @proxy.insert(@sql)
+    it 'should fall back to the master if all slaves fail' do
+      @slave_conns.each do |slave_conn|
+        slave_conn.should_receive(:select_all).once.and_raise(RuntimeError)
+      end
+      @master_conn.should_receive(:select_all).and_return(true)
+      @proxy.select_all @sql
+    end
+
+    it 'should try to reconnect to master after it has failed' do
+      @master_conn.should_receive(:update).and_raise(RuntimeError)
+      lambda { @proxy.update @sql }.should raise_error
+
+      @master_conn.should_receive(:reconnect!).and_return(true)
+      @master_conn.should_receive(:insert).and_return(true)
+      @proxy.insert @sql
     end
 
     it 'should reload models from the master' do
-      foo = FooModel.create!(:bar => 'baz')
-      foo.bar = "not_saved"
-      @slave1.should_not_receive(:select_all)
-      @slave2.should_not_receive(:select_all)
+      @slave_conns.each do |slave_conn|
+        slave_conn.should_not_receive :select_all
+      end
+
+      persisted = 'baz'
+      foo = TestModel.create!(:bar => persisted)
+      foo.bar = 'unpersisted'
+
       foo.reload
-      # we didn't stub @master#select_all here, check that we actually hit the db
-      foo.bar.should == 'baz'
+
+      foo.bar.should == persisted
     end
 
-    describe 'with sticky_slave ' do
-
-      before { MultiDb::ConnectionProxy.sticky_slave = true  }
-      after  { MultiDb::ConnectionProxy.sticky_slave = false }
-
-      it 'should not switch to the next reader automatically' do
-        @slave1.should_receive(:select_all).exactly(3)
-        @slave2.should_receive(:select_all).exactly(0)
-        3.times { @proxy.select_all(@sql) }
+    describe 'with sticky_slave enabled' do
+      before do
+        MultiDb::ConnectionProxy.sticky_slave = true
       end
 
-      it '#next_reader! should switch to the next slave' do
-        @slave1.should_receive(:select_one).exactly(3)
-        @slave2.should_receive(:select_one).exactly(7)
-        3.times { @proxy.select_one(@sql) }
-        @proxy.next_reader!
-        7.times { @proxy.select_one(@sql) }
+      after do
+        MultiDb::ConnectionProxy.sticky_slave = false
       end
 
-    end
-
-    describe '(accessed from multiple threads)' do
-      # NOTE: We cannot put expectations on the connection objects itself
-      #       for the threading specs, as connection pooling will cause
-      #       different connections being returned for different threads.
-
-      it '#current and #next_reader! should be local to the thread' do
-        @proxy.current.should == MultiDb::TestSlaveDatabase1
-        @proxy.next_reader!.should == MultiDb::TestSlaveDatabase2
-        Thread.new do
-          @proxy.current.should == MultiDb::TestSlaveDatabase1
-          @proxy.next_reader!.should == MultiDb::TestSlaveDatabase2
-          @proxy.current.should == MultiDb::TestSlaveDatabase2
-          @proxy.next_reader!.should == MultiDb::TestSlaveDatabase1
-          @proxy.current.should == MultiDb::TestSlaveDatabase1
+      it 'should not switch to the next slave' do
+        requests = 3
+        @slave_conns[0].should_receive(:select_all).exactly(requests)
+        @slave_conns[1..-1].each do |slave_conn|
+          slave_conn.should_not_receive :select_all
         end
-        @proxy.current.should == MultiDb::TestSlaveDatabase2
+
+        requests.times { @proxy.select_all @sql }
       end
 
-      it '#with_master should be local to the thread' do
+      it 'should still switch to next slave when next_reader! is called' do
+        requests1 = 3
+        requests2 = 7
+        @slave_conns[0].should_receive(:select_one).exactly(requests1)
+        @slave_conns[1].should_receive(:select_one).exactly(requests2)
+        @slave_conns[2..-1].each do |slave_conn|
+          slave_conn.should_not_receive :select_one
+        end
+
+        requests1.times { @proxy.select_one @sql }
+        @proxy.next_reader!
+        requests2.times { @proxy.select_one @sql }
+      end
+    end
+
+    describe 'in multiple threads' do
+      it 'should keep #current and #next_reader! local to the thread' do
+        @proxy.current.retrieve_connection.should      == @slave_conns[0]
+        @proxy.next_reader!.retrieve_connection.should == @slave_conns[1]
+
+        Thread.new do
+          @proxy.current.retrieve_connection.should      == @slave_conns[0]
+          @proxy.next_reader!.retrieve_connection.should == @slave_conns[1]
+          @proxy.next_reader!.retrieve_connection.should == @slave_conns[2]
+        end
+
+        @proxy.current.retrieve_connection.should == @slave_conns[1]
+      end
+
+      it 'should keep with_master blocks local to the thread' do
         @proxy.current.should_not == @proxy.master
+
         @proxy.with_master do
           @proxy.current.should == @proxy.master
+
           Thread.new do
             @proxy.current.should_not == @proxy.master
             @proxy.with_master do
@@ -221,160 +360,30 @@ describe MultiDb::ConnectionProxy do
             end
             @proxy.current.should_not == @proxy.master
           end
+
           @proxy.current.should == @proxy.master
         end
+
         @proxy.current.should_not == @proxy.master
       end
 
       it 'should switch to the next reader even whithin with_master-block in different threads' do
-        # Because of connection pooling in AR 2.2, the second thread will cause
-        # a new connection being created behind the scenes. We therefore just test
-        # that these connections are beting retrieved for the right databases here.
-        @proxy.master.should_not_receive(:retrieve_connection).and_return(@master)
-        MultiDb::TestSlaveDatabase1.should_receive(:retrieve_connection).twice.and_return(@slave1)
-        MultiDb::TestSlaveDatabase2.should_receive(:retrieve_connection).once.and_return(@slave2)
-        MultiDb::TestSlaveDatabase3.should_receive(:retrieve_connection).once.and_return(@slave3)
-        MultiDb::TestSlaveDatabase4.should_receive(:retrieve_connection).once.and_return(@slave4)
+        # Because of connection pooling in AR, the second thread create a new connection behind the scenes.
+        # Therefore, test that these connections are being retrieved for the correct databases.
+        @proxy.master.should_not_receive(:retrieve_connection)
+
+        MultiDb::TestSlaveDatabase1.should_receive(:retrieve_connection).twice.and_return(@slave_conns[0])
+        MultiDb::TestSlaveDatabase2.should_receive(:retrieve_connection).once.and_return( @slave_conns[1])
+        MultiDb::TestSlaveDatabase3.should_receive(:retrieve_connection).once.and_return( @slave_conns[2])
+        MultiDb::TestSlaveDatabase4.should_receive(:retrieve_connection).once.and_return( @slave_conns[3])
+
         @proxy.with_master do
           Thread.new do
             5.times { @proxy.select_one(@sql) }
           end.join
         end
       end
-
     end
 
-  end # with normal scheduler
-
-  describe 'with multiple established database connections' do
-    before do
-      MultiDb::ConnectionProxy.setup!
-
-      @main_proxy  = FooModel.connection_proxy
-      @main_master = @main_proxy.master.retrieve_connection
-      @main_slaves = [
-        MultiDb::TestSlaveDatabase1,
-        MultiDb::TestSlaveDatabase2,
-        MultiDb::TestSlaveDatabase3,
-        MultiDb::TestSlaveDatabase4
-      ]
-
-      @extra_proxy  = ExtraModel.connection_proxy
-      @extra_master = @extra_proxy.master.retrieve_connection
-      @extra_slaves = [
-        MultiDb::TestExtraSlaveDatabase1,
-        MultiDb::TestExtraSlaveDatabase2
-      ]
-    end
-
-    it 'should use different proxies for models that establish different connections' do
-      FooModel.connection.should_not == ExtraModel.connection
-
-      FooModel.connection.master.should == MasterModel
-      slaves = FooModel.connection.scheduler.items
-      slaves.length.should == @main_slaves.length
-      @main_slaves.each { |slave| slaves.should include(slave) }
-
-      ExtraModel.connection.master.should == ExtraModel
-      slaves = ExtraModel.connection.scheduler.items
-      slaves.length.should == @extra_slaves.length
-      @extra_slaves.each { |slave| slaves.should include(slave) }
-    end
-  end
-
-  describe "alternative scheduler" do
-    class MyScheduler
-      def initialize(slaves); :done; end
-      def current; :current; end
-      def next_reader!; :next end
-      def blacklist!; :blacklisted; end
-    end
-
-    it "has a 'scheduler' method that returns the current scheduler instance" do
-      my_scheduler = mock('My Scheduler!', :current => nil)
-      MyScheduler.should_receive(:new).at_least(:once).and_return(my_scheduler)
-      MultiDb::ConnectionProxy.setup!(MyScheduler)
-      ActiveRecord::Base.connection_proxy.should respond_to(:scheduler)
-      ActiveRecord::Base.connection_proxy.scheduler.should be(my_scheduler)
-    end
-
-    it "can be initialized with an optional alternative scheduling class" do
-      slaves = MultiDb::ConnectionProxy.send(:init_slaves, 'test')
-      proxy = MultiDb::ConnectionProxy.send(:new, @master, slaves, MyScheduler)
-      proxy.scheduler.should be_an_instance_of(MyScheduler)
-    end
-
-    it "uses an alternative scheduler if setup! is called with a compatible class" do
-      MultiDb::ConnectionProxy.setup!(MyScheduler)
-      ActiveRecord::Base.connection_proxy.scheduler.should be_an_instance_of(MyScheduler)
-    end
-
-    it "uses the default scheduler if no param is passed" do
-      MultiDb::ConnectionProxy.setup!
-      ActiveRecord::Base.connection_proxy.scheduler.should be_an_instance_of(MultiDb::Scheduler)
-    end
-
-    describe "has weights for query distribution" do
-      before do
-        MultiDb::ConnectionProxy.setup!
-      end
-
-      it "adds a WEIGHT constant to the MultiDb::TestSlaveDatabaseN 'models'" do
-        MultiDb::TestSlaveDatabase1.const_defined?('WEIGHT').should be_true
-      end
-
-      it "sets the WEIGHT to 1 if no weight is configured" do
-        MultiDb::TestSlaveDatabase1::WEIGHT.should == 1
-      end
-
-      it "sets the WEIGHT to whatever it is configured to" do
-        MultiDb::TestSlaveDatabase2::WEIGHT.should == 10
-      end
-    end
-
-    describe "defaults_to_master" do
-      before do
-        MultiDb::ConnectionProxy.defaults_to_master = true
-        MultiDb::ConnectionProxy.setup!
-        @proxy = ActiveRecord::Base.connection_proxy
-      end
-
-      after do
-        MultiDb::ConnectionProxy.defaults_to_master = nil
-      end
-
-      it "sets the default database to master" do
-        @proxy.current.should == @proxy.master
-      end
-
-      it "is still master, when using with_master" do 
-        @proxy.with_master do 
-          @proxy.current.should == @proxy.master
-        end
-      end
-
-      it "switches to slave, when using with_slave" do
-        @proxy.with_slave do 
-          @proxy.current.should_not == @proxy.master
-        end
-      end
-
-
-      it "keep right connection, when nesting with slave/master blocks" do
-        @proxy.with_slave do
-          @proxy.current.should_not == @proxy.master
-          @proxy.with_slave do
-            @proxy.current.should_not == @proxy.master
-            @proxy.with_master do
-              @proxy.current.should == @proxy.master
-            end
-            @proxy.current.should_not == @proxy.master
-          end
-          @proxy.current.should_not == @proxy.master
-        end
-        @proxy.current.should == @proxy.master
-      end
-    end
   end
 end
-
