@@ -253,23 +253,32 @@ describe MultiDb::ConnectionProxy do
       @main_proxy  = FooModel.connection_proxy
       @main_master = @main_proxy.master.retrieve_connection
       @main_slaves = [
-        MultiDb::TestSlaveDatabase1.retrieve_connection,
-        MultiDb::TestSlaveDatabase2.retrieve_connection,
-        MultiDb::TestSlaveDatabase3.retrieve_connection,
-        MultiDb::TestSlaveDatabase4.retrieve_connection
+        MultiDb::TestSlaveDatabase1,
+        MultiDb::TestSlaveDatabase2,
+        MultiDb::TestSlaveDatabase3,
+        MultiDb::TestSlaveDatabase4
       ]
 
       @extra_proxy  = ExtraModel.connection_proxy
       @extra_master = @extra_proxy.master.retrieve_connection
-      # Pending
-      # @extra_slaves = [
-      #   MultiDb::TestExtraSlaveDatabase1.retrieve_connection,
-      #   MultiDb::TestExtraSlaveDatabase2.retrieve_connection
-      # ]
+      @extra_slaves = [
+        MultiDb::TestExtraSlaveDatabase1,
+        MultiDb::TestExtraSlaveDatabase2
+      ]
     end
 
     it 'should use different proxies for models that establish different connections' do
-      pending
+      FooModel.connection.should_not == ExtraModel.connection
+
+      FooModel.connection.master.should == MasterModel
+      slaves = FooModel.connection.scheduler.items
+      slaves.length.should == @main_slaves.length
+      @main_slaves.each { |slave| slaves.should include(slave) }
+
+      ExtraModel.connection.master.should == ExtraModel
+      slaves = ExtraModel.connection.scheduler.items
+      slaves.length.should == @extra_slaves.length
+      @extra_slaves.each { |slave| slaves.should include(slave) }
     end
   end
 
