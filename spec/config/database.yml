@@ -45,6 +45,21 @@ test_extra_slave_database_1:
 test_extra_slave_database_2:
   <<: *test_extra
 
+readable_master:
+  adapter: mysql2
+  database: multi_db_readable_master
+  username: root
+  password:
+  host: 127.0.0.1
+  readable: true
+
+readable_master_slave_database:
+  adapter: mysql2
+  database: multi_db_readable_master
+  username: root
+  password:
+  host: 127.0.0.1
+
 unused:
   <<: *test
 

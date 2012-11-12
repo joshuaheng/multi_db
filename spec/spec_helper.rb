@@ -22,6 +22,12 @@ class ExtraModel < ActiveRecord::Base
   establish_connection :test_extra
 end
 
+ActiveRecord::Base.establish_connection :readable_master
+ActiveRecord::Migration.create_table(:readable_master_models, :force => true) {}
+class ReadableMasterModel < ActiveRecord::Base
+  establish_connection :readable_master
+end
+
 ActiveRecord::Base.establish_connection :test
 ActiveRecord::Migration.create_table(:test_models, :force => true) {|t| t.string :bar}
 class TestModel < ActiveRecord::Base; end

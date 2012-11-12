@@ -65,7 +65,7 @@ module MultiDb
           slaves = []
 
           unless connection_proxies[proxy_spec]
-            slaves = init_slaves proxy_spec
+            slaves = init_slaves proxy_spec, descendant
             slaves = [descendant] if slaves.empty?
             self.connection_proxies[proxy_spec] = new(descendant, slaves, scheduler)
             ActiveRecord::Base.connection_proxy = self.connection_proxies[proxy_spec] if proxy_spec == self.environment
@@ -86,29 +86,34 @@ module MultiDb
       # or
       #   production_slave_database_someserver:
       # These would be available later as MultiDb::SlaveDatabaseSomeserver
-      def init_slaves(spec)
+      def init_slaves(spec, master)
         slaves = [].tap do |slaves|
           ActiveRecord::Base.configurations.each do |name, values|
             if name.to_s =~ /^(#{spec}_slave_database.*)/
-              weight  = if values['weight'].blank?
-                          1
-                        else
-                          (v=values['weight'].to_i.abs).zero?? 1 : v
-                        end
-              MultiDb.module_eval %Q{
+              weight = (values['weight'] || 1).to_i.abs
+              weight = 1 if weight == 0
+
+              slave_classdef = %Q{
                 class #{$1.camelize} < ActiveRecord::Base
                   self.abstract_class = true
                   establish_connection :#{name}
                   WEIGHT = #{weight} unless const_defined?('WEIGHT')
                 end
-              }, __FILE__, __LINE__
+              }
+
+              MultiDb.module_eval slave_classdef, __FILE__, __LINE__
               slaves << "MultiDb::#{$1.camelize}"
             end
           end
         end
 
         # Sorting obviously isn't necessary, but it makes testing a bit easier
-        slaves.sort.map &:constantize
+        slaves.sort!.map! &:constantize
+
+        master_config = ActiveRecord::Base.configurations[spec]
+        slaves << master if master_config && master_config['readable']
+
+        slaves
       end
 
       private :new

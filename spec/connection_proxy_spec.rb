@@ -333,6 +333,21 @@ describe MultiDb::ConnectionProxy do
       end
     end
 
+    describe 'with a readable master' do
+      before do
+        @proxy = ReadableMasterModel.connection_proxy
+      end
+
+      it 'should read from master in addition to slaves' do
+        @proxy.scheduler.slaves.each do |slave|
+          slave.retrieve_connection.should_receive(:select_all)
+        end
+        @proxy.master.retrieve_connection.should_receive(:select_all)
+
+        (@proxy.scheduler.slaves.length + 1).times { @proxy.select_all }
+      end
+    end
+
     describe 'in multiple threads' do
       it 'should keep #current and #next_reader! local to the thread' do
         @proxy.current.retrieve_connection.should      == @slave_conns[0]
