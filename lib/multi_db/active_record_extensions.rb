@@ -10,8 +10,12 @@ module MultiDb
     end
 
     module InstanceMethods
+      def connection_proxy
+        self.class.connection_proxy
+      end
+
       def reload(options = nil)
-        @connection_proxy.with_master { super }
+        connection_proxy.with_master { super }
       end
     end
 
