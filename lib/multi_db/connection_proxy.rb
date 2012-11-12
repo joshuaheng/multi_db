@@ -174,7 +174,7 @@ module MultiDb
     def next_reader!
       return if  master_depth > 0  # don't if in with_master block
       self.current = @scheduler.next
-    rescue Scheduler::NoMoreItems
+    rescue Scheduler::NoMoreSlaves
       logger.warn "[MULTIDB] All slaves are blacklisted. Reading from master"
       self.current = @master
     end

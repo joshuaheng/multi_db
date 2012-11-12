@@ -65,7 +65,7 @@ describe MultiDb::ConnectionProxy do
       spec_slaves.each do |spec, slaves|
         proxy = MultiDb::ConnectionProxy.connection_proxies[spec]
         proxy.should_not be_nil
-        proxy.scheduler.items.should == slaves
+        proxy.scheduler.slaves.should == slaves
         proxy.master.should == spec_masters[spec]
       end
     end
@@ -87,7 +87,7 @@ describe MultiDb::ConnectionProxy do
         proxy.should_not be_nil
 
         # By "no" slaves, we mean that the only "slave" is actually the proxy's master connection
-        proxy.scheduler.items.should == [slave]
+        proxy.scheduler.slaves.should == [slave]
         proxy.master.should == slave
       end
     end
@@ -134,7 +134,7 @@ describe MultiDb::ConnectionProxy do
       it 'should use slaves when in a with_slave block' do
         @proxy.with_slave do
           @proxy.current.should_not == @proxy.master
-          @proxy.scheduler.items.should include(@proxy.current)
+          @proxy.scheduler.slaves.should include(@proxy.current)
         end
       end
 
@@ -142,7 +142,7 @@ describe MultiDb::ConnectionProxy do
         lambda { |nester, depth|
           @proxy.with_slave do
             @proxy.current.should_not == @proxy.master
-            @proxy.scheduler.items.should include(@proxy.current)
+            @proxy.scheduler.slaves.should include(@proxy.current)
 
             @proxy.with_master do
               @proxy.current.should == @proxy.master
@@ -160,7 +160,7 @@ describe MultiDb::ConnectionProxy do
       @proxy = TestModel.connection_proxy
 
       @master_conn = @proxy.master.retrieve_connection
-      @slave_conns = @proxy.scheduler.items.map &:retrieve_connection
+      @slave_conns = @proxy.scheduler.slaves.map &:retrieve_connection
     end
 
     def setup_slave_expectations(call, call_count, starting_index = 0)
