@@ -64,9 +64,8 @@ module MultiDb
 
           unless connection_proxies[proxy_spec]
             slaves = init_slaves proxy_spec
-            raise "No slave databases defined for #{proxy_spec}" if slaves.empty?
+            slaves = [descendant] if slaves.empty?
             connection_proxies[proxy_spec] = new(descendant, slaves, scheduler)
-
             ActiveRecord::Base.connection_proxy = connection_proxies[proxy_spec] if proxy_spec == self.environment
           end
 
