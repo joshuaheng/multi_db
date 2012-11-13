@@ -71,9 +71,14 @@ ActiveRecord::Base.class_eval do
       @proxy_spec
     end
 
+    def proxy_spec=(spec)
+      @proxy_spec = spec
+    end
+
     def establish_multi_db_connection(spec = nil)
-      @proxy_spec = (spec.is_a?(String) || spec.is_a?(Symbol)) ? spec.to_s : nil
-      establish_base_connection spec
+      establish_base_connection(spec).tap do
+        @proxy_spec = (spec.is_a?(String) || spec.is_a?(Symbol)) ? spec.to_s : nil
+      end
     end
 
     alias_method :establish_base_connection, :establish_connection
