@@ -23,6 +23,6 @@ Gem::Specification.new do |s|
   s.add_development_dependency 'rspec'
   s.add_development_dependency 'mysql2', '~> 0.3.10'
 
-  s.add_runtime_dependency 'activerecord', '~> 3.2.8'
+  s.add_runtime_dependency 'activerecord', '>= 2.1.0'
   s.add_runtime_dependency 'tlattr_accessors', '~> 0.0.3'
 end
