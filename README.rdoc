@@ -1,3 +1,25 @@
+= marionm/multi_db
+
+A quick changelist for this fork:
+
+==== Adds support for multiple master/slave clusters
+
+Models can now connect to alternate databases using establish_connection without
+having it overwritten. These can of course also have slaves.
+
+==== Readable master database
+
+If you want, you can schedule your master database to be read from alongside the
+slaves, by including 'readable: true' in your database.yml config for it.
+
+==== Slaves are no longer required
+
+Including the gem and calling MultiDb::ConnectionProxy.setup! no longer throws
+an execption if there are not slave databases defined. This can be especially
+useful in conjunction with the first item in this changelist.
+
+And now, the unmodified original readme:
+
 = multi_db
 
 =====-- This GEM was inspired by Rick Olson's "masochism"-Plugin
