@@ -33,7 +33,28 @@ describe MultiDb::ConnectionProxy do
       TestModel.connection.should be_kind_of(MultiDb::ConnectionProxy)
     end
 
-    it 'should generate slave classes for each used database.yml entry' do
+    it 'should generate slave classes for database.yml entries' do
+      slaves = {
+        'test_slave_database_1'       => 'MultiDb::TestSlaveDatabase1',
+        'test_slave_database_2'       => 'MultiDb::TestSlaveDatabase2',
+        'test_slave_database_3'       => 'MultiDb::TestSlaveDatabase3',
+        'test_slave_database_4'       => 'MultiDb::TestSlaveDatabase4',
+        'test_extra_slave_database_1' => 'MultiDb::TestExtraSlaveDatabase1',
+        'test_extra_slave_database_2' => 'MultiDb::TestExtraSlaveDatabase2'
+      }
+
+      MultiDb::ConnectionProxy.setup!
+
+      slaves.each do |spec, slave|
+        defined?(slave.constantize).should be_true
+        slave_class = slave.constantize
+        slave_class.proxy_spec.should == spec
+        slave_class.connection_proxy.class.should == slave_class.retrieve_connection.class
+      end
+    end
+
+    it 'should not generate slave classes for unused database.yml entries' do
+      defined?(MultiDb::UnusedSlaveDatabase).should be_false
       MultiDb::ConnectionProxy.setup!
 
       defined?(MultiDb::TestSlaveDatabase1).should be_true
@@ -50,46 +71,30 @@ describe MultiDb::ConnectionProxy do
     end
 
     it 'should create a connection proxy with slaves for each established connection' do
-      spec_masters = {
-        'test'       => TestModel,
-        'test_extra' => ExtraModel
+      specs = {
+        TestModel   => 'test',
+        MasterModel => 'test',
+        ExtraModel  => 'test_extra'
       }
 
-      spec_slaves = {
-        'test'       => [MultiDb::TestSlaveDatabase1, MultiDb::TestSlaveDatabase2, MultiDb::TestSlaveDatabase3,  MultiDb::TestSlaveDatabase4],
-        'test_extra' => [MultiDb::TestExtraSlaveDatabase1, MultiDb::TestExtraSlaveDatabase2]
+      slaves = {
+        TestModel   => [MultiDb::TestSlaveDatabase1, MultiDb::TestSlaveDatabase2, MultiDb::TestSlaveDatabase3,  MultiDb::TestSlaveDatabase4],
+        MasterModel => [MultiDb::TestSlaveDatabase1, MultiDb::TestSlaveDatabase2, MultiDb::TestSlaveDatabase3,  MultiDb::TestSlaveDatabase4],
+        ExtraModel  => [MultiDb::TestExtraSlaveDatabase1, MultiDb::TestExtraSlaveDatabase2]
       }
 
       MultiDb::ConnectionProxy.setup!
 
-      spec_slaves.each do |spec, slaves|
-        proxy = MultiDb::ConnectionProxy.connection_proxies[spec]
-        proxy.should_not be_nil
-        proxy.scheduler.slaves.should == slaves
-        proxy.master.should == spec_masters[spec]
+      specs.each do |model, spec|
+        proxy = model.connection_proxy
+        proxy.should be_a(MultiDb::ConnectionProxy)
+        proxy.master.should == model
+        proxy.scheduler.slaves.should == slaves[model]
       end
     end
 
-    it 'should create a connection proxy with "no" slaves for each generaged slave class' do
-      slaves_by_spec = {
-        'test_slave_database_1'       => MultiDb::TestSlaveDatabase1,
-        'test_slave_database_2'       => MultiDb::TestSlaveDatabase2,
-        'test_slave_database_3'       => MultiDb::TestSlaveDatabase3,
-        'test_slave_database_4'       => MultiDb::TestSlaveDatabase4,
-        'test_extra_slave_database_1' => MultiDb::TestExtraSlaveDatabase1,
-        'test_extra_slave_database_2' => MultiDb::TestExtraSlaveDatabase2
-      }
-
-      MultiDb::ConnectionProxy.setup!
-
-      slaves_by_spec.each do |spec, slave|
-        proxy = MultiDb::ConnectionProxy.connection_proxies[spec]
-        proxy.should_not be_nil
-
-        # By "no" slaves, we mean that the only "slave" is actually the proxy's master connection
-        proxy.scheduler.slaves.should == [slave]
-        proxy.master.should == slave
-      end
+    it 'should not create a proxy for models using connections with no slaves' do
+      NoSlavesModel.connection_proxy.should_not be_a(MultiDb::ConnectionProxy)
     end
 
     describe 'weights' do
@@ -191,7 +196,7 @@ describe MultiDb::ConnectionProxy do
 
     it 'should perform transactions on the master' do
       @master_conn.should_receive(:select_all).exactly(:once)
-      ActiveRecord::Base.transaction { @proxy.select_all @sql }
+      TestModel.transaction { @proxy.select_all @sql }
 
       #Should go to a slave
       @proxy.select_all @sql

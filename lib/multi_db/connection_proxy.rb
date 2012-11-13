@@ -17,8 +17,6 @@ module MultiDb
       DEFAULT_MASTER_MODELS = ['CGI::Session::ActiveRecordStore::Session']
     end
 
-    cattr_accessor :connection_proxies
-
     attr_accessor :master
     tlattr_accessor :master_depth, :current, true
 
@@ -57,21 +55,20 @@ module MultiDb
 
         ActiveRecord::Base.send :include, MultiDb::ActiveRecordRuntimeExtensions
 
-        self.connection_proxies = {}
-        ActiveRecord::Base.descendants.each do |descendant|
-          proxy_spec = descendant.proxy_spec || self.environment
-          slaves = []
+        masters = ActiveRecord::Base.descendants << ActiveRecord::Base
+        masters.each do |master|
+          spec   = master.proxy_spec || self.environment
+          slaves = init_slaves spec, master
+          count  = "#{slaves.length} slave#{'s' unless slaves.length == 1}"
 
-          unless connection_proxies[proxy_spec]
-            slaves = init_slaves proxy_spec, descendant
-            slaves = [descendant] if slaves.empty?
-            self.connection_proxies[proxy_spec] = new(descendant, slaves, scheduler)
-            ActiveRecord::Base.connection_proxy = self.connection_proxies[proxy_spec] if proxy_spec == self.environment
+          master.connection_proxy = if slaves.empty? || slaves == [master]
+            count = 'No slaves'
+            master.retrieve_connection
+          else
+            new master, slaves, scheduler
           end
 
-          descendant.send :include, MultiDb::ActiveRecordRuntimeExtensions
-          descendant.connection_proxy = connection_proxies[proxy_spec]
-          descendant.logger.info("[MULTIDB] Master and #{slaves.length} slave#{"s" if slaves.length > 1} loaded for #{descendant}")
+          master.logger.info "[MULTIDB] #{count} loaded for #{master} from #{spec}"
         end
       end
 
@@ -83,28 +80,27 @@ module MultiDb
       #   ...
       # These would be available later as MultiDb::DevelopmentSlaveDatabase0, etc.
       def init_slaves(spec, master)
-        slaves = [].tap do |slaves|
-          ActiveRecord::Base.configurations.each do |name, values|
-            if name.to_s =~ /^(#{spec}_slave_database.*)/
-              weight = (values['weight'] || 1).to_i.abs
-              weight = 1 if weight == 0
+        slaves = ActiveRecord::Base.configurations.map do |name, values|
+          if name.to_s =~ /^(#{spec}_slave_database.*)/
+            weight = (values['weight'] || 1).to_i.abs
+            weight = 1 if weight == 0
 
-              slave_classdef = %Q{
-                class #{$1.camelize} < ActiveRecord::Base
-                  self.abstract_class = true
-                  establish_connection :#{name}
-                  WEIGHT = #{weight} unless const_defined?('WEIGHT')
-                end
-              }
+            slave_name  = $1.camelize
+            slave_class = %Q{
+              class #{slave_name} < ActiveRecord::Base
+                self.abstract_class = true
+                establish_connection :#{name}
+                WEIGHT = #{weight} unless const_defined?('WEIGHT')
+              end
+            }
 
-              MultiDb.module_eval slave_classdef, __FILE__, __LINE__
-              slaves << "MultiDb::#{$1.camelize}"
-            end
+            MultiDb.module_eval slave_class, __FILE__, __LINE__
+            "MultiDb::#{slave_name}"
           end
         end
 
         # Sorting obviously isn't necessary, but it makes testing a bit easier
-        slaves.sort!.map! &:constantize
+        slaves.compact!.sort!.map! &:constantize
 
         master_config = ActiveRecord::Base.configurations[spec]
         slaves << master if master_config && master_config['readable']
@@ -210,7 +206,7 @@ module MultiDb
     rescue NotImplementedError, NoMethodError
       raise
 
-     # TODO Don't rescue everything
+    # TODO Don't rescue everything
     rescue => e
       raise_master_error(e) if master?
       logger.warn "[MULTIDB] Error reading from slave database"

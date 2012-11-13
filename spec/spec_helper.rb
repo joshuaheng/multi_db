@@ -16,6 +16,11 @@ ActiveRecord::Base.configurations = YAML::load(File.open(File.expand_path('../co
 
 ActiveRecord::Migration.verbose = false
 
+ActiveRecord::Base.establish_connection :default
+class NoSlavesModel < ActiveRecord::Base
+  establish_connection :default
+end
+
 ActiveRecord::Base.establish_connection :test_extra
 ActiveRecord::Migration.create_table(:extra_models, :force => true) {|t| t.string :pub}
 class ExtraModel < ActiveRecord::Base
