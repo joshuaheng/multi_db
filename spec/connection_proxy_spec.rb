@@ -67,6 +67,7 @@ describe MultiDb::ConnectionProxy do
     end
 
     it 'should not generate slave classes for unused database.yml entries' do
+      MultiDb::ConnectionProxy.setup!
       defined?(MultiDb::UnusedSlaveDatabase).should be_false
     end
 
@@ -94,6 +95,7 @@ describe MultiDb::ConnectionProxy do
     end
 
     it 'should not create a proxy for models using connections with no slaves' do
+      MultiDb::ConnectionProxy.setup!
       NoSlavesModel.connection_proxy.should_not be_a(MultiDb::ConnectionProxy)
     end
 
