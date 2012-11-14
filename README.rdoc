@@ -10,13 +10,21 @@ having it overwritten. These can of course also have slaves.
 ==== Readable master database
 
 If you want, you can schedule your master database to be read from alongside the
-slaves, by including 'readable: true' in your database.yml config for it.
+slaves, by including <tt>readable: true</tt> in your database.yml config for it.
 
 ==== Slaves are no longer required
 
 Including the gem and calling MultiDb::ConnectionProxy.setup! no longer throws
 an execption if there are not slave databases defined. This can be especially
 useful in conjunction with the first item in this changelist.
+
+==== ...and one gotcha
+
+Since this gem has been modified to handle connections per model, if your models
+get reloaded after the call to <tt>setup!</tt> (for example, on each request in
+a Rails development environment), their connections will be lost. You can get
+around this by calling <tt>setup!</tt> on every request, or (assuming you're in
+Rails) by always enabling <tt>config.cache_classes</tt>.
 
 And now, the unmodified original readme:
 
