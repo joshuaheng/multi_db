@@ -100,7 +100,8 @@ module MultiDb
         end
 
         # Sorting obviously isn't necessary, but it makes testing a bit easier
-        slaves.compact!.sort!.map! &:constantize
+        slaves.compact!
+        slaves.sort!.map! &:constantize
 
         master_config = ActiveRecord::Base.configurations[spec]
         slaves << master if master_config && master_config['readable']
