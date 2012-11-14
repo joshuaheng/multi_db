@@ -15,8 +15,9 @@ slaves, by including <tt>readable: true</tt> in your database.yml config for it.
 ==== Slaves are no longer required
 
 Including the gem and calling MultiDb::ConnectionProxy.setup! no longer throws
-an execption if there are not slave databases defined. This can be especially
-useful in conjunction with the first item in this changelist.
+an execption if there are not slave databases defined. Instead, the original
+connection will be used. This can be useful in conjunction with the first item
+in this changelist. (Note: Sinatra has issues with this for unknown reasons.)
 
 ==== ...and one gotcha
 
