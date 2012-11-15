@@ -49,7 +49,8 @@ describe MultiDb::ConnectionProxy do
         defined?(slave.constantize).should be_true
         slave_class = slave.constantize
         slave_class.proxy_spec.should == spec
-        slave_class.connection_proxy.class.should == slave_class.retrieve_connection.class
+        slave_class.connection_proxy.master.should == slave_class
+        slave_class.connection_proxy.scheduler.slaves.should == [slave_class]
       end
     end
 
@@ -94,9 +95,11 @@ describe MultiDb::ConnectionProxy do
       end
     end
 
-    it 'should not create a proxy for models using connections with no slaves' do
+    it 'should create a proxy with "no" slaves for models with no slaves' do
       MultiDb::ConnectionProxy.setup!
-      NoSlavesModel.connection_proxy.should_not be_a(MultiDb::ConnectionProxy)
+      # By no slaves, we mean that the only 'slave' is actually also the master
+      NoSlavesModel.connection_proxy.master.should == NoSlavesModel
+      NoSlavesModel.connection_proxy.scheduler.slaves.should == [NoSlavesModel]
     end
 
     describe 'weights' do

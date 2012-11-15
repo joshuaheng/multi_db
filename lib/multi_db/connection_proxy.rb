@@ -61,13 +61,12 @@ module MultiDb
           slaves = init_slaves spec, master
           count  = "#{slaves.length} slave#{'s' unless slaves.length == 1}"
 
-          master.connection_proxy = if slaves.empty? || slaves == [master]
+          if slaves.empty?
+            slaves = [master]
             count = 'No slaves'
-            master.retrieve_connection
-          else
-            new master, slaves, scheduler
           end
 
+          master.connection_proxy = new master, slaves, scheduler
           master.logger.info "[MULTIDB] #{count} loaded for #{master} from #{spec}"
         end
       end
