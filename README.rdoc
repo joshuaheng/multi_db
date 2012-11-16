@@ -25,7 +25,9 @@ Since this gem has been modified to handle connections per model, if your models
 get reloaded after the call to <tt>setup!</tt> (for example, on each request in
 a Rails development environment), their connections will be lost. You can get
 around this by calling <tt>setup!</tt> on every request, or (assuming you're in
-Rails) by always enabling <tt>config.cache_classes</tt>.
+Rails) by always enabling <tt>config.cache_classes</tt>. Also, to get the Rails
+console set up correctly, you'll want to have the call to <tt>setup!</tt> inside
+a <tt>config.after_initialize</tt> block.
 
 And now, the unmodified original readme:
 
