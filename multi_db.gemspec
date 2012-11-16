@@ -8,7 +8,7 @@ Gem::Specification.new do |s|
   s.rubygems_version = %q{1.3.1}
 
   s.homepage = "http://github.com/schoefmax/multi_db"
-  s.authors = ["Maximilian Sch\303\266fmann"]
+  s.authors = ["Maximilian Schofmann"]
   s.email = "max@pragmatic-it.de"
   s.description = "Connection proxy for ActiveRecord for single master / multiple slave database deployments"
   s.summary = "Connection proxy for ActiveRecord for single master / multiple slave database deployments"
