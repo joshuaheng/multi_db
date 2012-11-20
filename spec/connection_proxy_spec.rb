@@ -102,6 +102,12 @@ describe MultiDb::ConnectionProxy do
       NoSlavesModel.connection_proxy.scheduler.slaves.should == [NoSlavesModel]
     end
 
+    it 'should be friendly to classes that are not loaded before setup' do
+      MultiDb::ConnectionProxy.setup!
+      class NewClass < ActiveRecord::Base; end
+      NewClass.connection.should_not be_nil
+    end
+
     describe 'weights' do
       before do
         MultiDb::ConnectionProxy.setup!

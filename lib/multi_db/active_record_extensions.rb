@@ -56,8 +56,15 @@ module MultiDb
         return if ConnectionProxy.master_models.include?(self.to_s) || ConnectionProxy.master_models.include?(self)
         logger.info "[MULTIDB] hijacking connection for #{self.to_s}"
         class << self
+          alias_method :base_connection, :connection
+
           def connection
-            @connection_proxy
+            if @connection_proxy
+              @connection_proxy
+            else
+              logger.debug "[MULTIDB] Not using proxy for #{self}"
+              base_connection
+            end
           end
         end
       end
