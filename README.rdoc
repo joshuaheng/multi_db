@@ -5,7 +5,8 @@ A quick changelist for this fork:
 ==== Adds support for multiple master/slave clusters
 
 Models can now connect to alternate databases using establish_connection without
-having it overwritten. These can of course also have slaves.
+changing the connection for all other models. This is accomplished by
+maintaining multiple connection proxies as opposed to only one.
 
 ==== Readable master database
 
