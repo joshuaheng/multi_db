@@ -1,3 +1,5 @@
+YAML::ENGINE.yamler = 'syck'
+
 %w[active_record yaml erb rspec logger mysql2].each { |lib| require lib }
 
 require File.expand_path('../../lib/multi_db', __FILE__)
